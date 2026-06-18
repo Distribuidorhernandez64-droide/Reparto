@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Copiloto de Reparto</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2330; --line:#2a3340;
+    --ink:#f0f3f6; --dim:#8b97a6; --green:#2ea043; --green-deep:#1a7431;
+    --amber:#d29922; --blue:#388bfd; --red:#f85149;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; display:flex; flex-direction:column; overscroll-behavior:none; }
+  body.lock { -webkit-user-select:none; user-select:none; }
+  header { padding:14px 16px 12px; background:var(--panel); border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .route-name { font-size:13px; font-weight:600; letter-spacing:.3px; }
+  .route-name span { color:var(--dim); font-weight:500; }
+  .hbtns { display:flex; gap:7px; }
+  .menu-btn { background:var(--panel-2); border:1px solid var(--line); color:var(--dim); border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .progress { display:flex; gap:1px; background:var(--line); border-bottom:1px solid var(--line); }
+  .pstat { flex:1; background:var(--panel); padding:9px 4px; text-align:center; }
+  .pstat b { display:block; font-size:17px; font-weight:700; line-height:1.1; }
+  .pstat small { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+  .pstat.cash b { color:var(--green); font-size:15px; }
+  .pstat.left b { color:var(--amber); }
+  main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
+  /* pantalla cargar ruta */
+  .loader { padding:18px 16px 40px; }
+  .loader h2 { font-size:18px; margin-bottom:4px; }
+  .loader .sub { font-size:13px; color:var(--dim); margin-bottom:18px; line-height:1.5; }
+  .field { margin-bottom:18px; }
+  .field label { display:block; font-size:12px; font-weight:700; color:var(--ink); text-transform:uppercase; letter-spacing:.6px; margin-bottom:4px; }
+  .field .hint { font-size:12px; color:var(--dim); margin-bottom:8px; line-height:1.4; }
+  textarea { width:100%; background:var(--panel); border:1px solid var(--line); border-radius:11px; color:var(--ink); font-size:13px; padding:12px; font-family:ui-monospace,Menlo,monospace; resize:vertical; min-height:120px; line-height:1.5; }
+  textarea:focus { outline:none; border-color:var(--blue); }
+  .meta-row { display:flex; gap:10px; }
+  .meta-row .field { flex:1; }
+  input[type=text] { width:100%; background:var(--panel); border:1px solid var(--line); border-radius:11px; color:var(--ink); font-size:14px; padding:11px 12px; }
+  input[type=text]:focus { outline:none; border-color:var(--blue); }
+  .load-btn { width:100%; background:var(--green-deep); border:1px solid var(--green); color:#fff; border-radius:13px; padding:16px; font-size:16px; font-weight:700; margin-top:4px; }
+  .load-btn:active { background:var(--green); }
+  .err { background:#2d1518; border:1px solid var(--red); color:#ffb3ac; border-radius:10px; padding:11px 13px; font-size:13px; margin-bottom:14px; line-height:1.5; }
+  .warn-load { background:#2a2008; border:1px solid var(--amber); color:#f0d999; border-radius:10px; padding:11px 13px; font-size:13px; margin-bottom:14px; line-height:1.5; }
+
+  .behind { margin:10px 14px 0; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--dim); }
+  .behind .dot { color:var(--amber); font-size:14px; }
+  .behind b { color:var(--amber); font-weight:600; }
+  .behind .go { margin-left:auto; background:none; color:var(--amber); border:none; font-size:12px; font-weight:600; text-decoration:underline; padding:4px 6px; }
+  .hero { margin:14px 14px 0; background:linear-gradient(160deg,var(--panel-2),var(--panel)); border:1px solid var(--line); border-radius:16px; padding:20px 18px 18px; position:relative; overflow:hidden; }
+  .hero::before { content:""; position:absolute; top:0; left:0; width:5px; height:100%; background:var(--green); }
+  .hero.isdone::before { background:var(--dim); }
+  .hero .tag { font-size:11px; font-weight:700; color:var(--green); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:6px; }
+  .hero.isdone .tag { color:var(--dim); }
+  .hero .num { position:absolute; top:14px; right:16px; font-size:44px; font-weight:800; color:var(--line); line-height:1; }
+  .hero h1 { font-size:25px; font-weight:800; line-height:1.15; letter-spacing:-.5px; margin-bottom:10px; padding-right:50px; word-break:break-word; }
+  .hero .amount { font-size:22px; font-weight:700; color:var(--green); }
+  .hero.isdone .amount { color:var(--dim); }
+  .hero .htime { font-size:12px; color:var(--dim); margin-top:4px; }
+  .hero .nocoord { font-size:12px; color:var(--amber); margin-top:6px; }
+  .map-btn { margin-top:16px; width:100%; background:var(--panel); border:1px solid var(--blue); color:var(--blue); border-radius:11px; padding:13px; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .map-btn:active { background:#0d2440; }
+  .map-btn:disabled { border-color:var(--line); color:var(--dim); }
+  .navrow { display:grid; grid-template-columns:1fr 1.4fr 1fr; gap:9px; padding:12px 14px 4px; }
+  .btn { border:none; border-radius:13px; font-weight:700; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  .btn small { font-size:10px; font-weight:600; opacity:.75; }
+  .btn-nav { background:var(--panel-2); border:1px solid var(--line); color:var(--ink); padding:15px 6px; font-size:15px; }
+  .btn-nav:active { background:var(--line); }
+  .btn-nav:disabled { opacity:.3; }
+  .btn-done { background:var(--green-deep); border:1px solid var(--green); padding:15px 6px; font-size:16px; }
+  .btn-done:active { background:var(--green); }
+  .btn-done:disabled { opacity:.5; }
+  .list-head { padding:20px 18px 8px; }
+  .list-head h2 { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+  ul { list-style:none; padding:0 12px 30px; }
+  li { display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:12px 14px; margin-bottom:7px; }
+  li .idx { width:28px; height:28px; flex-shrink:0; border-radius:8px; background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--dim); }
+  li .info { flex:1; min-width:0; }
+  li .info .nm { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  li .info .am { font-size:12px; color:var(--dim); }
+  li .badge { font-size:13px; flex-shrink:0; text-align:right; color:var(--dim); font-weight:600; }
+  li .badge.pend { color:var(--amber); font-size:16px; }
+  li.current { border-color:var(--green); background:#122019; }
+  li.current .idx { background:var(--green-deep); border-color:var(--green); color:#fff; }
+  li.done { opacity:.65; }
+  li.done .nm { text-decoration:line-through; }
+  li.done .idx { background:var(--green-deep); border-color:var(--green-deep); color:#fff; }
+  li.behindrow .idx { background:#3a2f12; border-color:var(--amber); color:var(--amber); }
+  .summary { margin:16px 14px 0; border-radius:16px; overflow:hidden; border:1px solid var(--line); }
+  .summary .top { background:linear-gradient(160deg,var(--green-deep),#134e26); padding:20px; text-align:center; }
+  .summary .top .big { font-size:34px; }
+  .summary .top h2 { font-size:19px; margin:4px 0; }
+  .summary .top p { font-size:13px; color:#cdefd6; }
+  .summary .top b { font-size:22px; color:#fff; display:block; margin-top:6px; }
+  .pend-box { background:var(--panel); padding:14px 16px 6px; }
+  .pend-box .ph { font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:.8px; margin-bottom:10px; }
+  .pend-item { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .pend-item:last-child { border-bottom:none; }
+  .pend-item .pidx { width:26px; height:26px; border-radius:7px; background:#3a2f12; border:1px solid var(--amber); color:var(--amber); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+  .pend-item .pnm { font-size:14px; font-weight:600; flex:1; }
+  .pend-item .pam { font-size:12px; color:var(--dim); }
+  .pend-none { color:var(--dim); font-size:13px; padding:4px 0 12px; }
+</style>
+</head>
+<body class="lock">
+<header>
+  <div class="route-name" id="rname">Copiloto de Reparto</div>
+  <div class="hbtns">
+    <button class="menu-btn" id="resetBtn" style="display:none">↻</button>
+    <button class="menu-btn" id="shareBtn" style="display:none">📤</button>
+    <button class="menu-btn" id="infoBtn" style="display:none">Resumen</button>
+    <button class="menu-btn" id="newBtn" style="display:none">Nueva</button>
+  </div>
+</header>
+<div class="progress" id="prog" style="display:none">
+  <div class="pstat"><b id="pDone">0</b><small>Entregadas</small></div>
+  <div class="pstat left"><b id="pLeft">0</b><small>Faltan</small></div>
+  <div class="pstat cash"><b id="pCash">Q0</b><small>Cobrado</small></div>
+</div>
+<main id="main"></main>
+
+<script>
+var RUTA = [];
+var entregado = [], horas = [], pos = 0;
+var META = {ruta:"", vendedor:"", fecha:""};
+var SKEY = "copiloto_v5";
+
+// ---------- cargar ruta desde link compartido (#r=...) ----------
+var rutaDesdeLink = false;
+try {
+  var hash = window.location.hash || "";
+  if (hash.indexOf("#r=")===0){
+    var payload = decodeURIComponent(hash.slice(3));
+    var json = decodeURIComponent(escape(atob(payload)));
+    var data = JSON.parse(json);
+    if (data && data.RUTA && data.RUTA.length){
+      RUTA = data.RUTA;
+      META = data.META || META;
+      // clave única por ruta compartida, para que cada repartidor guarde su avance de ESA ruta
+      SKEY = "copiloto_shared_" + (META.ruta||"") + "_" + (META.fecha||"");
+      var sv = null;
+      try { sv = JSON.parse(localStorage.getItem(SKEY)); } catch(e){}
+      if (sv && sv.entregado && sv.entregado.length===RUTA.length){
+        entregado = sv.entregado; horas = sv.horas; pos = sv.pos||0;
+      } else {
+        entregado = RUTA.map(function(){return false;});
+        horas = RUTA.map(function(){return null;});
+        pos = 0;
+      }
+      rutaDesdeLink = true;
+    }
+  }
+} catch(e){}
+
+// ---------- cargar guardado (solo si no vino del link) ----------
+if (!rutaDesdeLink) {
+try {
+  var s = JSON.parse(localStorage.getItem(SKEY));
+  if (s && s.RUTA && s.RUTA.length) {
+    RUTA = s.RUTA; entregado = s.entregado; horas = s.horas; pos = s.pos||0; META = s.META||META;
+  }
+} catch(e){}
+}
+
+function guardar(){ try { localStorage.setItem(SKEY, JSON.stringify({RUTA:RUTA,entregado:entregado,horas:horas,pos:pos,META:META})); } catch(e){} }
+
+// ---------- utilidades ----------
+function fmt(n){ return "Q" + Math.round(n).toLocaleString("es-GT"); }
+function fmtFull(n){ return "Q" + n.toLocaleString("es-GT",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function hhmm(iso){ if(!iso) return ""; try { return new Date(iso).toLocaleTimeString("es-GT",{hour:"2-digit",minute:"2-digit"}); } catch(e){ return ""; } }
+function norm(s){
+  return (s||"").toUpperCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")  // quita acentos
+    .replace(/[^A-Z0-9 ]/g," ")                       // quita signos
+    .replace(/\s+/g," ").trim();
+}
+
+// ---------- parser del reporte ----------
+// cada línea: [docnum] NOMBRE ... MONTO LAT LON   (lat/lon opcionales)
+function parseReporte(txt){
+  var lineas = txt.split("\n");
+  var items = [];
+  for (var i=0;i<lineas.length;i++){
+    var ln = lineas[i].trim();
+    if (!ln) continue;
+    // ignorar encabezados típicos
+    var up = ln.toUpperCase();
+    if (up.indexOf("LISTADO")>=0 || up.indexOf("VENDEDOR")>=0 || up.indexOf("SUB TOTAL")>=0 ||
+        up.indexOf("TOTAL DOCUMENTOS")>=0 || up.indexOf("PAGINA")>=0 || up.indexOf("DISTRIBUIDORA")>=0 ||
+        up.indexOf("NRO.DOCUM")>=0 || up.indexOf("FECHA")===0 || up.indexOf("DESDE")===0 || up.indexOf("TEL:")>=0) continue;
+
+    // buscar coordenadas: dos números decimales (uno positivo ~14, otro negativo ~-91)
+    // pueden venir separados por espacio o coma
+    var lat=null, lon=null, resto=ln;
+    // patrón: lat (14.xxxx) , o espacio  lon (-91.xxxx)
+    var mcoord = ln.match(/(-?\d{1,3}\.\d{3,})[ ,]+(-?\d{1,3}\.\d{3,})\s*$/);
+    if (mcoord){
+      lat = parseFloat(mcoord[1]); lon = parseFloat(mcoord[2]);
+      resto = ln.slice(0, mcoord.index).trim();
+    }
+    // en resto: [docnum] NOMBRE ... MONTO
+    // monto = último número con coma o decimal al final
+    var mmonto = resto.match(/([\d.,]+)\s*$/);
+    var monto = 0;
+    if (mmonto){
+      var raw = mmonto[1].replace(/,/g,"");
+      var val = parseFloat(raw);
+      if (!isNaN(val)){ monto = val; resto = resto.slice(0, mmonto.index).trim(); }
+    }
+    // quitar docnum al inicio (primer token si es solo números)
+    var toks = resto.split(/\s+/);
+    if (toks.length>1 && /^\d+$/.test(toks[0])) toks.shift();
+    var nombre = toks.join(" ").trim();
+    if (!nombre) continue;
+    items.push({n:nombre, q:monto, lat:lat, lon:lon});
+  }
+  return items;
+}
+
+// ---------- juntar repetidos (mismo nombre) ----------
+function juntar(items){
+  var mapa = {};
+  var orden = [];
+  for (var i=0;i<items.length;i++){
+    var k = norm(items[i].n);
+    if (!mapa[k]){ mapa[k] = {n:items[i].n, q:items[i].q, lat:items[i].lat, lon:items[i].lon}; orden.push(k); }
+    else {
+      mapa[k].q += items[i].q;
+      if (mapa[k].lat==null && items[i].lat!=null){ mapa[k].lat=items[i].lat; mapa[k].lon=items[i].lon; }
+    }
+  }
+  return {mapa:mapa, orden:orden};
+}
+
+// ---------- cargar ruta desde los dos textos ----------
+function cargarRuta(repTxt, ordenTxt, meta){
+  var items = parseReporte(repTxt);
+  if (!items.length) return {error:"No pude leer ninguna tienda del reporte. Revisá que pegaste el reporte completo."};
+  var j = juntar(items);
+
+  // lista de orden: nombres, una por línea (puede llevar número adelante "1. NOMBRE" o solo NOMBRE)
+  var ords = ordenTxt.split("\n").map(function(x){return x.trim();}).filter(Boolean);
+  // quitar numeración inicial tipo "1.", "1)", "1 -"
+  ords = ords.map(function(x){ return x.replace(/^\s*\d+[\.\)\-\s]+/,"").trim(); }).filter(Boolean);
+
+  var ruta = [], noEnc = [], usados = {};
+  for (var i=0;i<ords.length;i++){
+    var k = norm(ords[i]);
+    if (mapaTiene(j.mapa,k)){
+      var realKey = encontrarKey(j.mapa,k);
+      ruta.push(j.mapa[realKey]);
+      usados[realKey] = true;
+    } else {
+      noEnc.push(ords[i]);
+    }
+  }
+  if (!ruta.length) return {error:"No casó ningún nombre de tu lista con el reporte. Revisá que los nombres estén parecidos a los del reporte."};
+
+  var sinCoord = ruta.filter(function(r){return r.lat==null;}).length;
+  // tiendas del reporte que no pusiste en el orden
+  var sobran = [];
+  for (var o=0;o<j.orden.length;o++){ if(!usados[j.orden[o]]) sobran.push(j.mapa[j.orden[o]].n); }
+
+  return {ruta:ruta, noEnc:noEnc, sinCoord:sinCoord, sobran:sobran, meta:meta};
+}
+function mapaTiene(mapa,k){ return encontrarKey(mapa,k)!=null; }
+function encontrarKey(mapa,k){
+  if (mapa[k]) return k;
+  // match flexible: que una contenga a la otra
+  var keys = Object.keys(mapa);
+  for (var i=0;i<keys.length;i++){
+    if (keys[i].indexOf(k)>=0 || k.indexOf(keys[i])>=0) return keys[i];
+  }
+  return null;
+}
+
+// ---------- navegación ----------
+function sigP(d){ for(var k=d+1;k<RUTA.length;k++){ if(!entregado[k]) return k; } return -1; }
+function antP(d){ for(var k=d-1;k>=0;k--){ if(!entregado[k]) return k; } return -1; }
+function atras(){ var a=[]; for(var k=0;k<pos;k++){ if(!entregado[k]) a.push(k); } return a; }
+
+// ---------- pantallas ----------
+function showHeaderButtons(on){
+  document.getElementById("resetBtn").style.display = on?"":"none";
+  document.getElementById("shareBtn").style.display = on?"":"none";
+  document.getElementById("infoBtn").style.display = on?"":"none";
+  document.getElementById("newBtn").style.display = on?"":"none";
+  document.getElementById("prog").style.display = on?"":"none";
+}
+
+function renderLoader(prefill){
+  showHeaderButtons(false);
+  document.getElementById("rname").textContent = "Cargar ruta del día";
+  var main = document.getElementById("main");
+  main.innerHTML =
+    '<div class="loader">'
+    + '<h2>Nueva ruta</h2>'
+    + '<div class="sub">Pegá el reporte de Monica y abajo tu lista de nombres en el orden que querés visitar. La app arma la ruta sola.</div>'
+    + '<div id="loadErr"></div>'
+    + '<div class="meta-row">'
+    +   '<div class="field"><label>Ruta</label><input type="text" id="mRuta" placeholder="San Rafael" value="'+(prefill&&prefill.ruta||"")+'"></div>'
+    +   '<div class="field"><label>Vendedor</label><input type="text" id="mVend" placeholder="Edwin" value="'+(prefill&&prefill.vendedor||"")+'"></div>'
+    + '</div>'
+    + '<div class="field"><label>1 · Reporte de Monica</label>'
+    +   '<div class="hint">Pegalo completo, tal como sale (con número, nombre, monto y coordenadas).</div>'
+    +   '<textarea id="repTxt" placeholder="15565 ELENA MORENTE 628.77 14.4799238 -91.0019070&#10;15566 TIENDA AMARILIS 864.48 ...">'+(prefill&&prefill.rep||"")+'</textarea>'
+    + '</div>'
+    + '<div class="field"><label>2 · Orden de visita</label>'
+    +   '<div class="hint">Un nombre por línea, en el orden que los visitás (del primero al último). Podés numerarlos o no.</div>'
+    +   '<textarea id="ordTxt" placeholder="1. ELENA MORENTE&#10;2. TIENDA AMARILIS&#10;3. LETICIA COC ...">'+(prefill&&prefill.ord||"")+'</textarea>'
+    + '</div>'
+    + '<button class="load-btn" id="loadBtn">Armar ruta</button>'
+    + '</div>';
+  var lb = document.getElementById("loadBtn");
+  if (lb) lb.addEventListener("click", doCargar);
+}
+
+function doCargar(){
+  var rep = document.getElementById("repTxt").value;
+  var ord = document.getElementById("ordTxt").value;
+  var meta = {
+    ruta: document.getElementById("mRuta").value.trim() || "Ruta",
+    vendedor: document.getElementById("mVend").value.trim() || "",
+    fecha: new Date().toLocaleDateString("es-GT",{day:"2-digit",month:"short"})
+  };
+  var errBox = document.getElementById("loadErr");
+  if (!rep.trim() || !ord.trim()){ errBox.innerHTML='<div class="err">Pegá el reporte y la lista de orden antes de armar la ruta.</div>'; return; }
+
+  var res = cargarRuta(rep, ord, meta);
+  if (res.error){ errBox.innerHTML='<div class="err">'+res.error+'</div>'; return; }
+
+  // avisos no bloqueantes
+  var avisos = "";
+  if (res.noEnc.length) avisos += "No casaron "+res.noEnc.length+" de tu lista: "+res.noEnc.join(", ")+". ";
+  if (res.sinCoord) avisos += res.sinCoord+" sin coordenadas (no abren en mapa). ";
+  if (res.sobran.length) avisos += res.sobran.length+" tiendas del reporte no las pusiste en el orden.";
+  if (avisos){
+    if (!confirm("Ruta armada con "+res.ruta.length+" paradas.\n\nAvisos:\n"+avisos+"\n\n¿Continuar igual?")){
+      return;
+    }
+  }
+
+  RUTA = res.ruta;
+  entregado = RUTA.map(function(){return false;});
+  horas = RUTA.map(function(){return null;});
+  pos = 0; META = meta;
+  guardar();
+  document.body.scrollTop=0;
+  render();
+}
+
+function render(){
+  if (!RUTA.length){ renderLoader(); return; }
+  showHeaderButtons(true);
+  document.getElementById("rname").innerHTML = META.ruta + ' <span>· '+(META.vendedor?META.vendedor+' · ':'')+META.fecha+'</span>';
+
+  var main = document.getElementById("main");
+  var done=0, cash=0;
+  for(var i=0;i<RUTA.length;i++){ if(entregado[i]){ done++; cash+=RUTA[i].q; } }
+  document.getElementById("pDone").textContent = done;
+  document.getElementById("pLeft").textContent = RUTA.length - done;
+  document.getElementById("pCash").textContent = fmt(cash);
+
+  var r = RUTA[pos], isDone = entregado[pos];
+  var h = "";
+  var ab = atras();
+  if (ab.length){
+    var nums = ab.map(function(i){return "#"+(i+1);}).join(", ");
+    h += '<div class="behind"><span class="dot">•</span> Quedó atrás <b>'+nums+'</b><button class="go" onclick="irA('+ab[0]+')">ir</button></div>';
+  }
+  var sp=sigP(pos), ap=antP(pos);
+  var hasCoord = (r.lat!=null && r.lon!=null);
+  h += '<div class="hero '+(isDone?'isdone':'')+'">'
+    + '<div class="num">'+("0"+(pos+1)).slice(-2)+'</div>'
+    + '<div class="tag">'+(isDone?"✓ Entregada":"Parada "+(pos+1)+" de "+RUTA.length)+'</div>'
+    + '<h1>'+r.n+'</h1>'
+    + '<div class="amount">'+fmtFull(r.q)+'</div>'
+    + (isDone && horas[pos] ? '<div class="htime">Entregada a las '+hhmm(horas[pos])+'</div>' : '')
+    + (!hasCoord ? '<div class="nocoord">• Sin ubicación en mapa</div>' : '')
+    + '<button class="map-btn" onclick="abrirMapa('+pos+')" '+(hasCoord?'':'disabled')+'>📍 '+(hasCoord?'Abrir en mapa':'Sin mapa')+'</button>'
+    + '</div>'
+    + '<div class="navrow">'
+    + '<button class="btn btn-nav" onclick="irA('+ap+')" '+(ap===-1?'disabled':'')+'>◀<small>Anterior</small></button>'
+    + '<button class="btn btn-done" onclick="entregar()" '+(isDone?'disabled':'')+'>✅ Entregado<small>'+(isDone?"ya entregada":"y avanzar")+'</small></button>'
+    + '<button class="btn btn-nav" onclick="irA('+sp+')" '+(sp===-1?'disabled':'')+'>▶<small>Siguiente</small></button>'
+    + '</div>';
+
+  if (done>0 && sp===-1){
+    var pend=[]; for(var j=0;j<RUTA.length;j++){ if(!entregado[j]) pend.push(j); }
+    h += '<div class="summary"><div class="top"><div class="big">'+(pend.length===0?"🎉":"🚚")+'</div>'
+      + '<h2>'+(pend.length===0?"Ruta completa":"Resumen de ruta")+'</h2>'
+      + '<p>'+done+' de '+RUTA.length+' entregadas · cobrado</p><b>'+fmtFull(cash)+'</b></div>'
+      + '<div class="pend-box"><div class="ph">Quedaron pendientes ('+pend.length+')</div>';
+    if (pend.length===0) h += '<div class="pend-none">Ninguna. Se entregaron todas.</div>';
+    else for(var p=0;p<pend.length;p++){ var pi=pend[p]; h+='<div class="pend-item"><div class="pidx">'+(pi+1)+'</div><div class="pnm">'+RUTA[pi].n+'<div class="pam">'+fmtFull(RUTA[pi].q)+'</div></div></div>'; }
+    h += '</div></div>';
+  }
+
+  h += '<div class="list-head"><h2>Todas las paradas</h2></div><ul>';
+  for(var k=0;k<RUTA.length;k++){
+    var cls = k===pos?"current":(entregado[k]?"done":(k<pos?"behindrow":""));
+    var badge = entregado[k]?(horas[k]?hhmm(horas[k]):"✓"):(k<pos?'<span class="badge pend">•</span>':"");
+    h += '<li class="'+cls+'" onclick="irA('+k+')"><div class="idx">'+(k+1)+'</div>'
+      + '<div class="info"><div class="nm">'+RUTA[k].n+'</div><div class="am">'+fmtFull(RUTA[k].q)+'</div></div>'
+      + '<div class="badge">'+badge+'</div></li>';
+  }
+  h += '</ul>';
+  main.innerHTML = h;
+  guardar();
+}
+
+function entregar(){
+  if (entregado[pos]) return;
+  entregado[pos]=true; horas[pos]=new Date().toISOString();
+  var nx=sigP(pos); if(nx!==-1) pos=nx;
+  render(); window.scrollTo({top:0,behavior:"smooth"});
+}
+function irA(i){ if(i<0||i>=RUTA.length) return; pos=i; render(); window.scrollTo({top:0,behavior:"smooth"}); }
+function abrirMapa(i){ var r=RUTA[i]; if(r.lat==null) return; window.location.href="geo:"+r.lat+","+r.lon+"?q="+r.lat+","+r.lon+"("+encodeURIComponent(r.n)+")"; }
+
+var resetArmed=false, resetTimer=null;
+document.getElementById("resetBtn").addEventListener("click", function(e){
+  var b=e.currentTarget;
+  if(!resetArmed){ resetArmed=true; b.textContent="¿Seguro?"; b.style.color="var(--amber)"; b.style.borderColor="var(--amber)";
+    resetTimer=setTimeout(function(){ resetArmed=false; b.textContent="↻"; b.style.color=""; b.style.borderColor=""; },2500);
+  } else { clearTimeout(resetTimer); resetArmed=false; b.textContent="↻"; b.style.color=""; b.style.borderColor="";
+    entregado=RUTA.map(function(){return false;}); horas=RUTA.map(function(){return null;}); pos=0; render(); window.scrollTo({top:0,behavior:"smooth"}); }
+});
+document.getElementById("shareBtn").addEventListener("click", function(){
+  // generar link con la ruta adentro (solo datos de ruta, sin marcas de entrega)
+  try {
+    var datos = {RUTA:RUTA, META:META};
+    var base = window.location.origin + window.location.pathname;
+    var json = JSON.stringify(datos);
+    var b64 = btoa(unescape(encodeURIComponent(json)));
+    var link = base + "#r=" + encodeURIComponent(b64);
+    if (navigator.share){
+      navigator.share({title:"Ruta "+META.ruta, text:"Ruta de reparto "+META.ruta, url:link})
+        .catch(function(){ copiarLink(link); });
+    } else {
+      copiarLink(link);
+    }
+  } catch(e){ alert("No se pudo generar el link: "+e.message); }
+});
+function copiarLink(link){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(function(){
+      alert("Link copiado. Pegalo en WhatsApp para el repartidor.\n\nLa ruta abre ya armada.");
+    }).catch(function(){ prompt("Copiá este link para el repartidor:", link); });
+  } else {
+    prompt("Copiá este link para el repartidor:", link);
+  }
+}
+document.getElementById("newBtn").addEventListener("click", function(){
+  if (confirm("¿Cargar una ruta nueva? La ruta actual y sus marcas se reemplazan.")){
+    renderLoader();
+  }
+});
+document.getElementById("infoBtn").addEventListener("click", function(){
+  var done=0; for(var i=0;i<RUTA.length;i++){ if(entregado[i]) done++; }
+  var txt=META.ruta+(META.vendedor?" · "+META.vendedor:"")+" · "+META.fecha+"\n\nEntregadas: "+done+" de "+RUTA.length+"\n";
+  var ch=[]; for(var j=0;j<RUTA.length;j++){ if(entregado[j]&&horas[j]) ch.push((j+1)+". "+RUTA[j].n+" — "+hhmm(horas[j])); }
+  if(ch.length) txt+="\nHoras de entrega:\n"+ch.join("\n");
+  var pe=[]; for(var k=0;k<RUTA.length;k++){ if(!entregado[k]) pe.push((k+1)+". "+RUTA[k].n); }
+  if(pe.length) txt+="\n\nPendientes ("+pe.length+"):\n"+pe.join("\n");
+  alert(txt);
+});
+
+render();
+</script>
+</body>
+</html>
